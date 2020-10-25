@@ -104,10 +104,7 @@ def _get_login_key_pbkdf2(pw: bytes, salt: bytes, pbkdf2_iters: int) -> bytes:
 
 def derive_login_key_from_user_pass(pw: str) -> str:
     ''' Given a user's account password passed to the API derive a key (using a decent kdf) that can be stored
-    for persistence.
-    argument must be string and return value is hex encoded string.
-
-    TODO: add a scrypt kdf option too, let knob man choose.
+    for persistence Argument must be string and return value is hex encoded string.
     '''
 
     # salt = b'todo_get_salt_from_conf_system'

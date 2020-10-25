@@ -46,27 +46,28 @@ _KNOBS.update({
     # it will start sleep waiting for the next request until there is a new request which will reset counter to 0.
     "DBL_DISPATCH_IDLE_COUNTER_THRESHOLD": 10,
 
-
-    # ******************** DBL Crypto
+    # ******************** Crypto
 
     # kdf method. one of "scrypt_then_pbkdf2_hmac", "pbkdf2_hmac", "scrypt"
     # scrypt_then_pbkdf2_hmac (with 16 MB mem) and 12000 rounds of pbkdf2 gets about 50 milliseconds,
     # or 5 sec for 100 hashes. Thats on 4.3 GHz zen+ AWS time probably goes up 2x
-    "DBL_KDF_METHOD": 'scrypt_then_pbkdf2_hmac',
+    "KRPTO_KDF_METHOD": 'scrypt_then_pbkdf2_hmac',
 
     # scrypt params, generally must be powers of two.
     # N is work factor, R is block size
     # memory usage: 128 * r * N >>>>>>> here we get 128 * 8 * 16 * 1024 = 16 MB
-    "DBL_SCRYPT_PARAMS_N": 16 * 1024,
-    "DBL_SCRYPT_PARAMS_R": 8,
+    "KRPTO_SCRYPT_PARAMS_N": 16 * 1024,
+    "KRPTO_SCRYPT_PARAMS_R": 8,
 
     # pbkdf2 params. set low if scrypt_then_pbkdf2_hmac. otherwise set higher.
     # of course users can just use a bit more than 8-10 chars and this wont be important.
-    "DBL_PBKDF2_HMAC_ITERATIONS": 12000,
+    "KRPTO_PBKDF2_HMAC_ITERATIONS": 12000,
 
-    # Salt. If a deployed website ever migrates to another language/platform,
-    # we will have only the shadows of the existing user base passwords. Keep that in mind. not really.
-    "DBL_KDF_SALT": b'b261ef47_l6sk_1ea8f2ac',
+    # Salt for auth subsystem. We might have other salts for other subsystems. This is avoid sharing secrets
+    # between subsystems but enable them to get seeded from one secret. For example, we might encrypt and/or sign
+    # client side cookies. We might also have an API for challenge/response for something. The DB might provide
+    # a single session secret that these subsystems can use to derive their own subsystem secrets from.
+    "KRPTO_AUTH_SS_KDF_SALT": b'b261ef47_l6sk_auth_1ea8f2ac',
 })
 
 # ******************** On disk sqlite DAO
