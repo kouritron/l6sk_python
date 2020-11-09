@@ -33,6 +33,16 @@ server counter would be nonsense.
 lines of text, treat each "line" as a log msg. this allows l6sk to be used on a client that doesnt
 use the clinet SDK. but rather any generic program that could be redirected to the fifo
 
+# TODO this wont be known for a while
+- we need a back stop, that is on by default, in case there arent any newline characters showing up in the stream.
+- read as much as there is but no more than 64k or 256k into a buffer.
+- scan the buffer for lines of text, terminated by newline, if not found within a limit
+
+Update: maybe this resolves it, fh.readline doc:
+" ... Read and return a line from the stream.
+If size is specified, at most size bytes will be read ..."
+
+
 
 
 - this would be internally implemented not inside the l6sk API / server program.
