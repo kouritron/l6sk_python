@@ -169,40 +169,6 @@ def _dbg_becnh_kdf():
 # **************************************** uuid
 def _dbg_bench_uuid():
 
-    print('----------------------------- v1')
-    tmp = _get_rand_bytes_v1().hex()
-    print(f"hex: {tmp}")
-
-    # tmp = base64.b32encode(_get_rand_bytes_v1()).decode('ascii')
-    # print(f"b32: {tmp}")
-
-    tmp = base64.urlsafe_b64encode(_get_rand_bytes_v1()).decode('ascii')
-    print(f"b64: {tmp}")
-
-    # b85 not a good idea if you want to put in database.
-    # tmp = base64.b85encode(_get_rand_bytes_v1()).decode('ascii')
-    # print(f"b85: {tmp}")
-
-    print('----------------------------- v2')
-    tmp = _get_rand_bytes_v2().hex()
-    print(f"hex: {tmp}")
-
-    # tmp = base64.b32encode(_get_rand_bytes_v2()).decode('ascii')
-    # print(f"b32: {tmp}")
-
-    tmp = base64.urlsafe_b64encode(_get_rand_bytes_v2()).decode('ascii')
-    print(f"b64: {tmp}")
-
-    print('----------------------------- v3')
-    tmp = _get_rand_bytes_v3().hex()
-    print(f"hex: {tmp}")
-
-    # tmp = base64.b32encode(_get_rand_bytes_v3()).decode('ascii')
-    # print(f"b32: {tmp}")
-
-    tmp = base64.urlsafe_b64encode(_get_rand_bytes_v3()).decode('ascii')
-    print(f"b64: {tmp}")
-
     print('----------------------------- mini bench for v1: ')
 
     count = 1 * 1000

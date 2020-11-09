@@ -1,0 +1,67 @@
+
+# ======================================================================================================================
+# ======================================================================================================================
+# ============================================================================================= python3 + sqlite version
+
+make a python3 (probably tornado) + sqlite version for now.
+
+it should have options for ephemeral backend,
+ie ":memory:"
+or disk (no sync, memory buffer for bursts, default discard policies)
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+# =============================================================================================================== schema
+
+- expanded log record schema from lg36.
+add server arrival ts, client sdk ts, client counter, ....
+sometimes (browser) client sdk ts might be so bad, server arrival time might do better.
+some clients might init themselves to generate and inc their own counter.
+(this should be no problem in browser, in fact it should be default client SDK behavior)
+server counter would be nonsense.
+
+
+
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+# ========================================================================================================== fifo option
+
+- option to run l6sk in fifo mode. ie ask it to create a fifo (named pipe) and then absorb
+lines of text, treat each "line" as a log msg. this allows l6sk to be used on a client that doesnt
+use the clinet SDK. but rather any generic program that could be redirected to the fifo
+
+
+
+- this would be internally implemented not inside the l6sk API / server program.
+but rather as a middleman that uses the client SDK and HTTP posts to l6sk.
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+# ================================================================================================================= misc
+
+- could do later versions with golang, high req/s frontend,
+but still 1 sqlite db ??
+or sharded sqlite db, are writing to disk separately ??
+and some or all of: dump command, consolidate, export parquet ???
+
+# or
+we could have 8, 16, ... memory tables, just a list of log records ..., (not recreating sqlite)
+
+and then a background worker to dump them into sqlite or parquet.
+
+of course w/ knobs and defaults on how much memory to use max,
+and whether to discard, or slow down taking new ones if max reached, ...
+
+nothing will beat the perf and portability of a go version. snaps dont work on windows, and older nano PC
+like raspberry pi, ...
+
+
+
+
+
+
+
