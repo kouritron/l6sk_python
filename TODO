@@ -27,12 +27,14 @@ server counter would be nonsense.
 
 # ======================================================================================================================
 # ======================================================================================================================
-# ========================================================================================================== fifo option
+# ========================================================================================================== fifo_2_l6sk
 
 - option to run l6sk in fifo mode. ie ask it to create a fifo (named pipe) and then absorb
 lines of text, treat each "line" as a log msg. this allows l6sk to be used on a client that doesnt
 use the clinet SDK. but rather any generic program that could be redirected to the fifo
 
+
+# ----------------------------------
 # TODO this wont be known for a while
 - we need a back stop, that is on by default, in case there arent any newline characters showing up in the stream.
 - read as much as there is but no more than 64k or 256k into a buffer.
@@ -42,11 +44,69 @@ Update: maybe this resolves it, fh.readline doc:
 " ... Read and return a line from the stream.
 If size is specified, at most size bytes will be read ..."
 
+Update2: i think its much simpler, we just use:
+tmp_fifo.readline(max_line_length)
+
+w/ a max_line_length, thats set to a knob.
+and then test and see what happens.
+
+Update3: it looks mostly like this. we'll have a knob,
+something along the lines of max line length (256 bytes or 256 KB user settable from cli)
+a log msg, will be either a line or a this many bytes.
+
+A json document getting printed to stdout in this mode will be multi line anyway. 
+
+*** Down the road maybe give an option to the users to provide a regex. tokens matching this regex will mark
+the start of a new log msg, instead of new line marking the end, and it would read upto a max limit
+
+read()/readline() dont block when fifo is empty. neither does os.read() just returns empty bytes.
+but there is a blocking behavior initially, it seems that unless both ends are opened, the other one blocks.
 
 
 
 - this would be internally implemented not inside the l6sk API / server program.
 but rather as a middleman that uses the client SDK and HTTP posts to l6sk.
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+# ==================================================================================================== clinet side logic
+
+# for the python client sdk, the user would acquire a 'logger' object that would collect the log msg,
+# gather runtime info (client timestamp, caller lineno, ...) fire off HTTP requests to the server to send over the
+# log record. There are multiple ways to do this:
+
+# ***** 1: simple
+# in each log.dbg(), log.info(), ... we can fire off a HTTP request, including 3 way handshake, send,
+# close connection. Very simple, no state to keep around, no connections to manage.
+# and probably very bad overhead for almost every user. it might even take longer than a synchronized print()/write()
+# to a file on disk.
+
+# ***** 2: simple+
+# same as option 1, but with a thread safe, connection pool. create connections when needed, dont throw them away,
+# keep them in a pool and re-use it. still a log.info() will do a tcp socket write() operation that will take
+# some time, even w/ server on the same machine, but should be no worse than a print() to a stdout that maybe
+# goes to console or maybe gets redirected to a file somewhere.
+
+
+# ***** 3: multithreaded log handler
+# create a thread + a queue when a logger object is created. (only one thread and q for all loggers of this type)
+# now the user calls like log.dbg(), log.info() simply execute a in-process, in-memory, q.put() operation
+# and return back to the user right away. This is will be very fast, much faster than a print() call,
+# and wont block the user waiting for network. the other thread will consume the queue and forward the msgs
+# to the log server, running on its own thread, and re-usaing connections as it sees fit.
+
+# this is probably the best performance option, however, some users might not be thrilled you are creating
+# threads, just because they imported you. (ok import + instantiate a class)
+#
+# one example is a user who is doing his own multiprocessing and fork() and threads usually dont mix.
+# POSIX says after a fork, only one thread is running the child, ...
+# threads and fork()
+# http://www.linuxprogrammingblog.com/threads-and-fork-think-twice-before-using-them
+
+
+
+
 
 
 # ======================================================================================================================
