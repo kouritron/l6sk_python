@@ -5,14 +5,14 @@ Basically build out a particular DBL, a particular logger, and start the Web ser
 """
 
 import os
+import threading
 from pathlib import Path
 import shutil
-import threading
 
 from l6sk.dbl.dao_sqlite import DAO_SQLITE
 from l6sk.dbl.dbl_dispatch import DBL_REQUEST_DISPATCH, dbl_service_thread_entry
 from l6sk import knobman as km
-from l6sk import lg36
+from l6sk import log_util as log
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -20,16 +20,14 @@ from l6sk import lg36
 def webapp_init():
 
     # start by reading in the knobs.
-    print(f"webapp_init: starting litech4t web server ... pid: {os.getpid()}")
-    km.init_knob_man()
+    print(f"Starting l6sk web server ... pid: {os.getpid()}\n\n")
 
-    # ******************** Init logging
-    # it should lazy init.
-    lg36.info("lg36 should be good to go now.")
-    lg36.dbg(f"Current knobs: {km.get_dbg_snapshot_as_json_string()}")
+    km.init_knob_man()
+    log.info("knobman initialized.")
+    log.dbg(f"Current knobs: {km.get_dbg_snapshot_as_json_string()}")
 
     # ******************** CHOOSE DAO
-    lg36.info("Building out DBL Using the sqlite3 dao")
+    log.info("Building out DBL Using the sqlite3 dao")
 
     dao_kwargs = {"db_filename": km.get_knob("DBL_SQLITE_DB_FILENAME")}
     dao_maker_callable = lambda: DAO_SQLITE(**dao_kwargs)
@@ -42,8 +40,8 @@ def webapp_init():
                          name=km.get_knob("DBL_WORKER_THREAD_NAME"),
                          args=(dao_maker_callable, dispatch))
 
-    # TODO there is unresolved question here. I dont think DBL should be daemonized
-    # t.setDaemon(True)
+    # TODO there is unresolved question here. Daemonizing DBL simply means if main thread is gone, no dbl is needed
+    t.setDaemon(True)
     t.start()
 
 
