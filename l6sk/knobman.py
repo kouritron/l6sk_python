@@ -130,7 +130,7 @@ _KNOBS.update({
 # ============================================================================================ KNOB MAN INTERFACE / INIT
 def init_knob_man():
 
-    print(f"knob man init called. unix time: {time.time()}")
+    print(f"knob man init called. Time now: {time.time():,.4f}")
 
     # if there is something than needs compute at init time do it here.
 
@@ -163,7 +163,7 @@ def init_knob_man():
     # ******************** Next
 
     # ******************** dont come bacck here again.
-    print(f'knob man init complete. unix_time: {time.time()}')
+    print(f"knob man init complete. Time now: {time.time():,.4f}")
     global _KNOBMAN_INITIALIZED
     _KNOBMAN_INITIALIZED = True
 
