@@ -1,8 +1,13 @@
 # log helper for l6sk's own development.
 # since l6sk project itself is about creating a logging system, we dont really want to make it rely on some other
 # sophisticated logging mechanism for its own development.
-# stdout is fine for l6sk's own logs. here are some helper functions to collect some more runtime info
-# and make it easy to toggle verbosity levels in one place. no sqlite here.
+# For this reason l6sk's own logs just go to stdout. No need to collect max info and put it somewhere possibly
+# across the network and then do SQL and FTS on it. These things are basicaully l6sk is being created for.
+#
+# This file just contains some helpers to print things with style and verbosity and allow controlling them
+# from in one place.
+
+
 
 import os
 import time
@@ -59,6 +64,9 @@ class LOG_RECORD:
     tname: str = None
     tid: str = None
 
+    def __post_init__(self):
+        assert self.lvl in _LOG_LEVELS, f"unknown log level: {self.lvl}"
+
 
 def _mk_lgr(msg_lvl, log_msg) -> LOG_RECORD:
     """ Generate a complete log record. This function should be called immediately after a log msg was called on
@@ -92,6 +100,27 @@ def _mk_lgr(msg_lvl, log_msg) -> LOG_RECORD:
     lgr.tid = str(ct.ident)
 
     return lgr
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+# =================================================================================================== Filtering decision
+
+def should_filter_lgr(lgr: LOG_RECORD) -> bool:
+    """ Return True if log record should be ignored. False to process it.
+    This function is the central place within log_util module to make filtering decision.
+
+    Here you have a compelete log record w/ all available information. Feel free to modify this function to:
+        - increase/decrease verbosity
+        - filter based on levels (dbg, info, warn, ...)
+        - filter based on caller filename ...
+    """
+
+    # if lgr.lvl in {"DBUG"}:
+    #    return True
+
+    return False
+
 
 
 # ======================================================================================================================
@@ -131,7 +160,7 @@ def _get_msg_fmt(lgr: LOG_RECORD) -> str:
     if lgr.lvl in {'CRIT'}:
         msg_builder = f'{_ANSI_RED}CRIT|{msg_builder}{_ANSI_RESET}'
 
-    return msg_builder
+    return f"{msg_builder}\n"
 
 
 # ======================================================================================================================
@@ -143,31 +172,36 @@ def _get_msg_fmt(lgr: LOG_RECORD) -> str:
 def dbg(msg):
 
     lgr = _mk_lgr("DBUG", msg)
-    print(_get_msg_fmt(lgr))
+    if not should_filter_lgr(lgr):
+        print(_get_msg_fmt(lgr), end="")
 
 
 def info(msg):
 
     lgr = _mk_lgr("INFO", msg)
-    print(_get_msg_fmt(lgr))
+    if not should_filter_lgr(lgr):
+        print(_get_msg_fmt(lgr), end="")
 
 
 def warn(msg):
 
     lgr = _mk_lgr("WARN", msg)
-    print(_get_msg_fmt(lgr))
+    if not should_filter_lgr(lgr):
+        print(_get_msg_fmt(lgr), end="")
 
 
 def err(msg):
 
     lgr = _mk_lgr("ERRR", msg)
-    print(_get_msg_fmt(lgr))
+    if not should_filter_lgr(lgr):
+        print(_get_msg_fmt(lgr), end="")
 
 
 def crit(msg):
 
     lgr = _mk_lgr("CRIT", msg)
-    print(_get_msg_fmt(lgr))
+    if not should_filter_lgr(lgr):
+        print(_get_msg_fmt(lgr), end="")
 
 
 # ======================================================================================================================
