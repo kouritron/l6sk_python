@@ -148,7 +148,8 @@ disable=print-statement,
         blacklisted-name,
         too-many-arguments,
         raise-missing-from,
-        unnecessary-lambda
+        unnecessary-lambda,
+        no-member
 
 
 [REPORTS]

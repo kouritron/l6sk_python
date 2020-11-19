@@ -1,0 +1,24 @@
+
+/* Fonts:
+
+for code:
+font-family: "Fira Mono", "Consolas", "Courier New", monospace;
+
+general:
+font-family: Arial, Calibri, "Segoe UI", sans-serif;
+
+web fonts w/ local fallback
+font-family: 'Ubuntu', sans-serif;
+font-family: 'Ubuntu Mono', monospace;
+
+*/
+
+html {
+    font-family: 'Ubuntu', sans-serif;
+}
+
+
+.l6_mono {
+    font-family: 'Ubuntu Mono', monospace;
+}
+

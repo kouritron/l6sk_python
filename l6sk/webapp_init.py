@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Web App Init system. This module manages lifecycle, config knobs, and others for various subsystem.
 Basically build out a particular DBL, a particular logger, and start the Web server.
