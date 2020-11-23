@@ -1,164 +1,189 @@
 # knobs manager.
 # put all the config options here.
-# we r doing it as python file, as opposed to JSON, or dev.env prod.env, .....
+# we r doing it as python file, as opposed to JSON, YAML, .env file, .....
 # This has the advantage that you can generate some options programmatically if need be. For example by
-# querying EC2 metadata endpoint and finding out which AZ you are in. Or generate random numbers ....
-
-# Dont import anything outside stdlib here.
+# querying EC2 metadata endpoint and finding out which AZ you are in. Or generate random numbers, or find a path ...
+# We could also section this file if we have dev/qa/prod params, ...
 
 import os
 import sys
 import time
 import json
-import shutil
-
-from dataclasses import dataclass
-import typing
 
 from pathlib import Path
+
+from dataclasses import dataclass
+import shutil
+import typing
 import enum
 
-# ======================================================================================================================
-# ======================================================================================================================
-# ==================================================================================================== GLOBAL KNOBS DICT
-# this will be a lazy init singleton. All the knobs will be stored here eventually possbily after getting constructed
-# inside that lazy init. The lazy init could also be called explicitely. work with users who dont init, if they do,
-# let them control when it happens.
-_KNOBMAN_INITIALIZED = False
-_KNOBS = {}
+# Dont import project level modules here. Idea is for knobman to control other files, not the other way around.
 
 # ======================================================================================================================
 # ======================================================================================================================
-# ============================================================================================================ DBL Knobs
-# Two dicts can be unioned with dict_a.update(dict_b). duplicate keys will resolve in favor of the update argument.
+# ======================================================================================================================
+# ======================================================================================================================
+# ================================================================================================================ Knobs
 
-_KNOBS.update({
+_KNOBS = {
 
-    # ******************** BASIC DBL options
+    # ------------------------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------------------------------- General options
+    # One of the benefits of .py knobs file vs JSON/YAML, is to figure out things at runtime.
+    # knobman prefers strings, not other objects like Path. In general, strings are always preferred in knobman.
+    "STATIC_DIR_PATHNAME": str((Path(__file__) / '..' / '..' / 'l6sk_webui' / 'static').resolve()),
+    "TEMPLATES_DIR_PATHNAME": str((Path(__file__) / '..' / '..' / 'l6sk_webui' / 'templates').resolve()),
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------------------------- Tornado app options
+    # 'PORT': 6060,
+    # Port and debug mode is handled by tornado cli option parsing. TODO find out what the listen host is
+    # 'LISTEN_HOST': '127.0.0.1',
+
+    # 'WSGI_SERVER': 'cheroot',
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------------------- l6sk API
+    # If you need to "sleep wait" inside request handlers (possibly waiting for DBL results) use this.
+    # but we found much better solutions than sleep waiting for DBL operations.
+    # "L6SK_API__SLEEP_WAIT_TIMEOUT": 0.01,
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------- Crypt Util (system wide)
+    # 18 bytes == 144 bits (2 to the -144 is as collision safe as any other space)
+    # 18, 21, 24, ... aligns nicely with b64 so no trailing '=' is needed.
+    # choose between 8 and 64. (8 bytes == 64 bits  --  64 bytes == 512 bits)
+    "CU__UUID_LEN": 18,
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------------------- Crypt Util (AUTH Subsystem)
+    # There might be more than 1 KDF later. These are options for the "auth kdf"
+
+    # diff salts for diff subsystem is prudent. Helps avoid sharing secrets between subsystems even
+    # if they are seeded from one secret. ie server might encrypt and/or sign client side cookies.
+    # It might have an API for challenge/response for something.
+    # If you have a generic script that injects just one secret into an env var at runtime (ie session_secret, ...),
+    # and dont want to constantly update that script, you could salt it for different subsystems.
+    "CU_AUTH_KDF__SALT": b'b261ef47_l6sk_auth_1ea8f2ac',
+
+    # kdf method. one of "scrypt_then_pbkdf2_hmac", "pbkdf2_hmac", "scrypt"
+    # scrypt_then_pbkdf2_hmac (with 16 MB mem) and 40k rounds of pbkdf2 takes about 80 milliseconds, on 4GHz zen+
+    "CU_AUTH_KDF__METHOD": 'scrypt_then_pbkdf2_hmac',
+
+    # scrypt params, generally must be powers of two.
+    # N is work factor, R is block size
+    # memory usage: 128 * r * N >>>>>>> here we get 128 * 8 * 16 * 1024 = 16 MB
+    "CU_AUTH_KDF__SCRYPT_N": 16 * 1024,
+    "CU_AUTH_KDF__SCRYPT_R": 8,
+
+    # pbkdf2 params. if pbkdf2 is all you have, good idea to set this 100k+
+    # of course users can just use a bit more than 8-10 chars and this wont be important.
+    "CU_AUTH_KDF__PBKDF2_HMAC_ITERATIONS": 40 * 1000,
+
+    # derived key len for auth kdf.
+    "CU_AUTH_KDF__DKLEN": 18,
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------- Misc
     # thread name is useful for debugging.
     "DBL_WORKER_THREAD_NAME": "dbl_worker_thread",
 
     # sleep wait timeout for the DBL worker thread, in seconds i.e. 0.01 equals 10 milli seconds.
-    # This value might not be the same as the timeout for request handlers waiting for DBL results.
+    # The idea is that DBL worker will sleep this much, if it hasnt seen a request in a while, instead of
+    # of busy waiting/angrily checking the queue for the next req constantly.
+    # This is not related to API handlers waiting for DBL results. That problem has better solutions than sleep wait.
     "DBL_WORKER_THREAD_SLEEP_WAIT_TIMEOUT": 0.01,
 
     # dbl dipatcher will not sleep between requests, unless this many attempts face empty queues. In that case
     # it will start sleep waiting for the next request until there is a new request which will reset counter to 0.
     "DBL_DISPATCH_IDLE_COUNTER_THRESHOLD": 10,
 
-    # ******************** Crypto
+    # ------------------------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------------- Service Limits
+    # various subsystems may read these limits and refuse service beyond them.
+    # for example the limits on user name length could be used by the web layer to reject names that are too long
+    # or too short. These can also be used by the DB Layer in case the DB wants to assert such things also.
+    # (possibly assert name len twice, in web layer, and db layer)
+    # These knobs could also be published for outside world. not just used internally.
+    "SL__USER_NAME_LEN_MIN": 2,
+    "SL__USER_NAME_LEN_MAX": 96,
+    "SL__USER_NAME_LEGAL_CHARS": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890_",
+    "SL__USER_NAME_LEGAL_CHARS_START": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
 
-    # kdf method. one of "scrypt_then_pbkdf2_hmac", "pbkdf2_hmac", "scrypt"
-    # scrypt_then_pbkdf2_hmac (with 16 MB mem) and 12000 rounds of pbkdf2 gets about 50 milliseconds,
-    # or 5 sec for 100 hashes. Thats on 4.3 GHz zen+ AWS time probably goes up 2x
-    "KRPTO_KDF_METHOD": 'scrypt_then_pbkdf2_hmac',
+    # LGRP = Log Group
+    # Each log group is probably:
+    #   - A separate sqlite memory db, in case of sqlite memory DAO
+    #   - A separate sqlite disk file, in case of sqlite disk DAO
+    #   - A separate schema, in case of postgres DAO
+    #   - A separate Database, in case of mysql/mariadb DAO
+    # PG/Mariadb will probably take issue with db/schema names that are too long (i think upto 63 should be fine)
+    # unless you are ok with the overhead of an extra translation table somewhere, you might want to keep
+    # these lengths low, and with a restricted charset
+    "SL__LGRP_NAME_LEN_MIN": 2,
+    "SL__LGRP_NAME_LEN_MAX": 48,
+    "SL__LGRP_NAME_LEGAL_CHARS": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890_",
+    "SL__LGRP_NAME_LEGAL_CHARS_START": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+}
 
-    # scrypt params, generally must be powers of two.
-    # N is work factor, R is block size
-    # memory usage: 128 * r * N >>>>>>> here we get 128 * 8 * 16 * 1024 = 16 MB
-    "KRPTO_SCRYPT_PARAMS_N": 16 * 1024,
-    "KRPTO_SCRYPT_PARAMS_R": 8,
-
-    # pbkdf2 params. set low if scrypt_then_pbkdf2_hmac. otherwise set higher.
-    # of course users can just use a bit more than 8-10 chars and this wont be important.
-    "KRPTO_PBKDF2_HMAC_ITERATIONS": 12000,
-
-    # Salt for auth subsystem. We might have other salts for other subsystems. This is avoid sharing secrets
-    # between subsystems but enable them to get seeded from one secret. For example, we might encrypt and/or sign
-    # client side cookies. We might also have an API for challenge/response for something. The DB might provide
-    # a single session secret that these subsystems can use to derive their own subsystem secrets from.
-    "KRPTO_AUTH_SS_KDF_SALT": b'b261ef47_l6sk_auth_1ea8f2ac',
-})
+# ======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================= Optional Knobs
+# dict_a.update(dict_b) unions dicts. Duplicate keys will resolve in favor of the update argument.
 
 # ******************** On disk sqlite DAO
-_KNOBS.update({
+# _KNOBS.update({
+#     # drop old files/tables on each run
+#     "SQLITE_FS_DAO__START_CLEAN": True,
 
-    # if retrying, delay this long before reconnecting. Careful this will stall every DAO call. The reconnect
-    # is a connection health/lifecycle management feature, not a retry until request is served feature.
-    'DAO_SQLITE_FS_RECONNECT_DELAY': 0.01,
+#     # Sqlite db file. must be str. In general you better have good reason to put non-str objects in knobman
+#     # keep it in a dedicated parent folder, which will be dropped in case of clean start
+#     "SQLITE_FS_DAO__DB_FILENAME": str((Path(__file__) / '..' / '..' / 'ignored_data' / 'DBL' / 'l6sk.db').resolve()),
 
-    # synchronous off means we are good with a write() once its passed to the OS.
-    # unlike PG, this isnt just a dataloss risk, turning this off does risk data corruption.
-    "DAO_SQLITE_FS_PRAGMAS": [
-        "PRAGMA synchronous = OFF",
-    ],
+#     # synchronous off means we are good with a write() once its passed to the OS.
+#     # unlike PG, this isnt just a dataloss risk, turning this off does carry some risk of data/db_file corruption.
+#     "SQLITE_FS_DAO__PRAGMAS": [
+#         "PRAGMA synchronous = OFF",
+#     ],
+# })
 
-    # drop old files/tables on each run
-    "DAO_SQLITE_FS_START_WITH_CLEAN_FILE": True,
-
-    # sqlite db file, disk, ram. must be string.
-    "DAO_SQLITE_FS_DB_FILENAME": str((Path(__file__) / '..' / '..' / 'ignored_data' / 'DBL' / 'l6sk.db').resolve()),
-
-})
-
-# ******************** in mem sqlite DAO
-_KNOBS.update({
-    # TODO fill in.
-    "DAO_SQLITE_MEM_XXXX": "YYYYYYYYY",
-
-})
-
-# ******************** Service Limits
-# various subsystems may read these limits and refuse service beyond them.
-# for example the limits on user name length could be used by the web layer to reject too long or too short names,
-# but also could be read and used by DB schema assert them on db records
-_KNOBS.update({
-
-    "SL_USER_NAME_LEN_MIN": 3,
-    "SL_USER_NAME_LEN_MAX": 64,
-})
-
+# ******************** MEMORY sqlite DAO
+# _KNOBS.update({
+#     # TODO fill in.
+#     "SQLITE_MEM_DAO__XXXX": "YYYYYYYYY",
+# })
 
 # ======================================================================================================================
 # ======================================================================================================================
-# ======================================================================================================== Web App knobs
-_KNOBS.update({
-    'PORT': 6060,
-    'LISTEN_HOST': '127.0.0.1',
-    'WA_DEBUG_MODE': False,
-
-    # 'WSGI_SERVER': 'cheroot',
-
-    # sleep wait timeout for request handlers that are waiting for DBL results
-    "REQUEST_SLEEP_WAIT_TIMEOUT": 0.01,
-
-})
-
-
 # ======================================================================================================================
 # ======================================================================================================================
-# ============================================================================================ KNOB MAN INTERFACE / INIT
+# ================================================================================ Knobman API + the necessary lazy init
+_KNOBMAN_INITIALIZED = False
+
+
 def init_knob_man():
 
     print(f"knob man init called. Time now: {time.time():,.4f}")
+    # if there is something than needs compute at init time, but not import time, do it here.
 
-    # if there is something than needs compute at init time do it here.
+    # ******************** Sqlite disk DAO, if exists.
+    # deal w/ sqlite db directory and clean start flags.
+    sqlite_fs_dao_db_file = _KNOBS.get('SQLITE_FS_DAO__DB_FILENAME')
 
-    # ******************** deal w/ sqlite db directory and clean start flags.
-    db_file_parent_dir = str((Path(_KNOBS["DAO_SQLITE_DISK_DB_FILENAME"]) / '..').resolve())
+    if sqlite_fs_dao_db_file:
+        db_file_parent_dir = str((Path(sqlite_fs_dao_db_file) / '..').resolve())
 
-    # make sqlite db dir if not exists:
-    Path(db_file_parent_dir).mkdir(parents=True, exist_ok=True)
+        # make sqlite db dir if not exists:
+        Path(db_file_parent_dir).mkdir(parents=True, exist_ok=True)
 
-    # drop db file, if it exists.
-    if _KNOBS["DAO_SQLITE_FS_START_WITH_CLEAN_FILE"]:
-
-        db_file = _KNOBS["DAO_SQLITE_FS_DB_FILENAME"]
-        if (":memory:" != db_file) and os.path.exists(db_file):
-            try:
-                os.remove(db_file)
-            except Exception as ex:
-                print(f"Caught exception while attempting to reset sqlit db file: {ex}")
-
-
-    # ******************** static folder path.
-    repo_root = (Path(__file__) / '..' / '..').resolve()
-    print(f'repo_root appears to be: {repo_root}')
-
-    static_dir_pathname = str((repo_root / 'static').resolve())
-    print(f'static folder path resolved to be at: {static_dir_pathname}')
-
-    _KNOBS["STATIC_DIR_PATHNAME"] = static_dir_pathname
+        # drop db file, if it exists.
+        if _KNOBS["SQLITE_FS_DAO__START_CLEAN"]:
+            if (":memory:" != sqlite_fs_dao_db_file) and os.path.exists(sqlite_fs_dao_db_file):
+                try:
+                    os.remove(sqlite_fs_dao_db_file)
+                except Exception as ex:
+                    print(f"Exception while trying to reset sqlite db file: {ex}")
 
     # ******************** Next
 
@@ -193,14 +218,16 @@ def set_knob(kkey: str, kval):
     _KNOBS[kkey] = kval
 
 
-def update_knobs(new_knobs: dict):
-    """ Given a knobs dict (or partial knobs dict), update current knobs. Conflict to be
-    resolved in favor of the incoming dict. """
+# This shouldnt exist really even for testing. Components need to be testable on their own.
+# def update_knobs(new_knobs: dict):
+#     """ Given a knobs dict (or partial knobs dict), update current knobs. Conflict to be
+#     resolved in favor of the incoming dict. """
 
-    if not _KNOBMAN_INITIALIZED:
-        init_knob_man()
+#     if not _KNOBMAN_INITIALIZED:
+#         init_knob_man()
 
-    _KNOBS.update(new_knobs)
+#     _KNOBS.update(new_knobs)
+
 
 # this for dbg info.
 def get_dbg_snapshot_as_json_string() -> str:

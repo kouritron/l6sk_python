@@ -22,10 +22,11 @@ import tornado.options as topts
 # topts.options             >>> Get the options from here
 
 
+import l6sk.knobman as km
+import l6sk.log_util as log
+
 from l6sk.dbl.dao_sqlite import DAO_SQLITE
 from l6sk.dbl.dbl_dispatch import DBL_REQUEST_DISPATCH, dbl_service_thread_entry
-from l6sk import knobman as km
-from l6sk import log_util as log
 from l6sk.l6sk_contract import L6SK_ROUTES
 
 
