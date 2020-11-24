@@ -12,66 +12,75 @@ from l6sk import log_util as log
 
 # ======================================================================================================================
 # ======================================================================================================================
-# ================================================================================================================= UUID
+# ===================================================================================================== Unique random ID
+# NOTE 1: constants in this class arent really knobs. they are just constants. Its the UID class's concern how
+# to generate UID. the only knob for knobman is to decide if uuid is going be fast, slow, v1, v2, ....
+class UUIDGen:
+    def __init__(self, uuid_version: str, uuid_num_bytes=18) -> None:
 
-# 18 bytes (144 bits), 21, 24, ... aligns with b64 so no trailing '=' is needed.
-# choose between 8 and 64. (8 bytes == 64 bits  --  64 bytes == 512 bits)
-_UUID_LEN_IN_BYTES = 18
+        # assert minimum sensible defaults, disallow things that would break this implementation.
 
-# used by v3
-_UUID_V3_COUNTER = 1
+        # uuid less than 12 bytes is not going to be unique.
+        assert uuid_num_bytes >= 12
+        assert uuid_num_bytes < 64
 
+        # diff versions trade spped for extra randomness caution. but they are really fast anyways.
+        assert uuid_version in {'v1', 'v2', 'v3'}
 
-# **************************************** v1 just os rand
-# approx 1 micro second (10 to the -6) not milli
-def _get_rand_bytes_v1() -> bytes:
+        self._uuid_num_bytes = uuid_num_bytes
+        self._uuid_version = uuid_version
 
-    return os.urandom(_UUID_LEN_IN_BYTES)
+        # v3 is paranoid. keeps a counter for extra safety against collisions
+        self._uuid_v3_counter = 1
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # v1 just os rand. approx 1 micro second (10 to the -6) not milli
+    def _uuid_v1(self) -> bytes:
+        return os.urandom(self._uuid_num_bytes)
 
-# **************************************** v2 os rand + system clock + timing between syscalls
-# approx 7 micro second (10 to the -6) not milli
-def _get_rand_bytes_v2() -> bytes:
+    # v2 os rand + system clock + timing between multiple syscalls
+    # approx 7 micro second (10 to the -6) not milli
+    def _uuid_v2(self) -> bytes:
 
-    buf_bytes = os.urandom(256)
+        # v2 is a bit paranoid about collisions.
+        buf_bytes = str(time.time()).encode('ascii')
+        buf_bytes += os.urandom(256)
+        return hashlib.sha3_512(buf_bytes).digest()[:self._uuid_num_bytes]
 
-    # if you are paranoid about collisions.
-    buf_bytes += str(time.time()).encode('ascii')
+    # v3 very paranoid
+    # approx 25 micro seconds (10 to the -6) not milli
+    def _uuid_v3(self) -> bytes:
 
-    return hashlib.sha3_512(buf_bytes).digest()[:_UUID_LEN_IN_BYTES]
+        self._uuid_v3_counter += 1
+        buf_bytes = os.urandom(32)
+        buf_bytes += str(time.time()).encode('ascii')
 
+        for _ in range(16):
+            buf_bytes += os.urandom(16)
+            self._uuid_v3_counter += 1
 
-# **************************************** v3: very paranoid
-# approx 25 micro seconds (10 to the -6) not milli
-def _get_rand_bytes_v3() -> bytes:
+        buf_bytes += str(self._uuid_v3_counter).encode('ascii')
+        return hashlib.sha3_512(buf_bytes).digest()[:self._uuid_num_bytes]
 
-    global _UUID_V3_COUNTER
-    _UUID_V3_COUNTER += 1
+    # ------------------------------------------------------------------------------------------------------------------
+    def get_l6sk_uuid_b64(self) -> str:
 
-    buf_bytes = os.urandom(32)
+        uuid_bytes = None
 
-    # if you are paranoid about collisions.
-    buf_bytes += str(time.time()).encode('ascii')
+        if self._uuid_version in {'v2'}:
+            uuid_bytes = self._uuid_v2()
+        elif self._uuid_version in {'v3'}:
+            uuid_bytes = self._uuid_v3()
+        else:
+            uuid_bytes = self._uuid_v1()
 
-    for _ in range(16):
-        buf_bytes += os.urandom(16)
-        _UUID_V3_COUNTER += 1
-
-    buf_bytes += str(_UUID_V3_COUNTER).encode('ascii')
-
-    return hashlib.sha3_512(buf_bytes).digest()[:_UUID_LEN_IN_BYTES]
-
-
-def dbl_uuid() -> str:
-
-    # return _get_rand_bytes_v1().hex()
-    return base64.urlsafe_b64encode(_get_rand_bytes_v3()).decode('ascii')
+        return base64.urlsafe_b64encode(uuid_bytes).decode('ascii')
 
 
 # ======================================================================================================================
 # ======================================================================================================================
 # ================================================================================================================== KDF
-class AUTH_KDF:
+class AuthKDF:
     def __init__(self, salt: bytes, scrypt_n: int, scrypt_r: int, pbkdf2_iters: int, dklen: int, kdf_method: str):
 
         # allow only acceptable/sensible params, feel free to hard code constants here. These arent really knobs.
@@ -117,7 +126,13 @@ class AUTH_KDF:
         self._kdf_method = kdf_method
 
         log.info(f'Initialized new AUTH_KDF instance. kdf_method: {kdf_method}')
-        log.dbg(f'New AUTH_KDF instance initialized w/ params: {self}')
+        log.dbg(f'AUTH_KDF details:\n{self}')
+
+    def __str__(self) -> str:
+        str_builder = f"<AUTH_KDF: {self._salt}, {self._scrypt_n}, {self._scrypt_r}, {self._pbkdf2_prf}, "
+        str_builder += f"{self._dklen}, {self._kdf_method}"
+
+        return str_builder
 
     # ------------------------------------------------------------------------------------------------------------------
     def _get_dk_scrypt(self, pw: bytes) -> bytes:
@@ -161,17 +176,19 @@ class AUTH_KDF:
 # ======================================================================================================================
 # ======================================================================================================================
 # ================================================================================= Module API + the necessary lazy init
-_SUBSYS_INITIALIZED = False
-_AUTH_KDF_SINGLETON = None
+_crypt_util_initialized = False
+_auth_kdf_singleton = None
+_uuid_singleton = None
 
 
 def init_crypt_util():
 
-    global _SUBSYS_INITIALIZED
-    global _AUTH_KDF_SINGLETON
+    global _crypt_util_initialized
+    global _auth_kdf_singleton
+    global _uuid_singleton
 
     # ***** get AUTH_KDF params and init one copy.
-    _AUTH_KDF_SINGLETON = AUTH_KDF(
+    _auth_kdf_singleton = AuthKDF(
         salt=km.get_knob("CU_AUTH_KDF__SALT"),
         scrypt_n=km.get_knob("CU_AUTH_KDF__SCRYPT_N"),
         scrypt_r=km.get_knob("CU_AUTH_KDF__SCRYPT_R"),
@@ -180,33 +197,51 @@ def init_crypt_util():
         kdf_method=km.get_knob('CU_AUTH_KDF__METHOD').lower(),
     )
 
-    _SUBSYS_INITIALIZED = True
+    # ***** get UUID generator params and init one copy.
+    _uuid_singleton = UUIDGen(
+        uuid_version=km.get_knob("CU__UUID_VERSION"),
+        uuid_num_bytes=km.get_knob("CU__UUID_NUM_BYTES"),
+    )
+
+    _crypt_util_initialized = True
 
 
-def get_auth_kdf() -> AUTH_KDF:
+def get_auth_kdf() -> AuthKDF:
     """ Return the default AUTH_KDF instance. """
 
-    if not _SUBSYS_INITIALIZED:
+    if not _crypt_util_initialized:
         init_crypt_util()
 
-    return _AUTH_KDF_SINGLETON
+    return _auth_kdf_singleton
+
+
+def get_uuid_generator() -> UUIDGen:
+    """ Return the default UUIDGen instance. """
+
+    if not _crypt_util_initialized:
+        init_crypt_util()
+
+    return _uuid_singleton
 
 
 # ======================================================================================================================
 # ======================================================================================================================
 # ============================================================================================================== DBG DEV
-# TODO: use timeit module for these and cut down.
+# timeit module doesnt really make for less code here. roughly same number of lines.
 def _dbg_becnh_kdf():
 
-    iterations = 100
+    # do the init to avoid, getting lazy init into benchmark
+    init_crypt_util()
+
+    iterations = 20
 
     start_time = time.perf_counter()
     for _ in range(iterations):
         get_auth_kdf().get_pw_shadow_b64('hello world')
     elapsed_time = time.perf_counter() - start_time
 
-    print(f"total time: {elapsed_time}  --  iterations: {iterations}")
-    print(f"time per call {elapsed_time/float(iterations)}")
+    print(f"total time: {elapsed_time:.2f} seconds  --  iterations: {iterations}")
+    print(f"time per call {(elapsed_time/float(iterations))*1000:.4f} ms")
     # we got:
     # <pbkdf, sha512, kdf iter 40k, dklen=32> -->> 30 ms (not micro) per call, ~ 3 seconds for 100 calls
     # <pbkdf, sha512, kdf iter 40k, dklen=16> -->> 30 ms (not micro) per call, ~ 3 seconds for 100 calls
@@ -225,46 +260,45 @@ def _dbg_becnh_kdf():
 # **************************************** uuid
 def _dbg_bench_uuid():
 
-    print('----------------------------- mini bench for v1: ')
+    # do the init to avoid, getting lazy init into benchmark
+    init_crypt_util()
 
+    # v1
+    print('\n----------------------------- mini bench for v1: ')
     count = 1 * 1000
-
     start_time = time.perf_counter()
     for _ in range(count):
-        _get_rand_bytes_v1()
+        get_uuid_generator()._uuid_v1()  # pylint: disable=protected-access
     elapsed_time = time.perf_counter() - start_time
 
-    print(f"total time: {elapsed_time}  --  iterations: {count}")
-    print(f"time per call {elapsed_time/float(count)}")
+    print(f"total time: {elapsed_time:.4f} seconds  --  iterations: {count}")
+    print(f"time per call {(elapsed_time/float(count))*1000*1000:.4f} micro seconds")
 
-    print('----------------------------- mini bench for v2: ')
-
+    # v2
+    print('\n----------------------------- mini bench for v2: ')
     count = 1 * 1000
-
     start_time = time.perf_counter()
     for _ in range(count):
-        _get_rand_bytes_v2()
+        get_uuid_generator()._uuid_v2()  # pylint: disable=protected-access
     elapsed_time = time.perf_counter() - start_time
 
-    print(f"total time: {elapsed_time}  --  iterations: {count}")
-    print(f"time per call {elapsed_time/float(count)}")
+    print(f"total time: {elapsed_time:.4f} seconds  --  iterations: {count}")
+    print(f"time per call {(elapsed_time/float(count))*1000*1000:.4f} micro seconds")
 
-    print('----------------------------- mini bench for v3: ')
-
+    # v3
+    print('\n----------------------------- mini bench for v3: ')
     count = 1 * 1000
-
     start_time = time.perf_counter()
     for _ in range(count):
-        _get_rand_bytes_v3()
+        get_uuid_generator()._uuid_v3()  # pylint: disable=protected-access
     elapsed_time = time.perf_counter() - start_time
 
-    print(f"total time: {elapsed_time}  --  iterations: {count}")
-    print(f"time per call {elapsed_time/float(count)}")
-
+    print(f"total time: {elapsed_time:.4f} seconds  --  iterations: {count}")
+    print(f"time per call {(elapsed_time/float(count))*1000*1000:.4f} micro seconds")
 
 # ======================================================================================================================
 # ======================================================================================================================
 # ======================================================================================================================
 if '__main__' == __name__:
-    # _dbg_bench_uuid()
-    _dbg_becnh_kdf()
+    _dbg_bench_uuid()
+    # _dbg_becnh_kdf()

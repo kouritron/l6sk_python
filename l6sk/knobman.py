@@ -53,7 +53,10 @@ _KNOBS = {
     # 18 bytes == 144 bits (2 to the -144 is as collision safe as any other space)
     # 18, 21, 24, ... aligns nicely with b64 so no trailing '=' is needed.
     # choose between 8 and 64. (8 bytes == 64 bits  --  64 bytes == 512 bits)
-    "CU__UUID_LEN": 18,
+    "CU__UUID_NUM_BYTES": 18,
+
+    # v1, v2, v3. v3 is best and most secure while still pretty fast (microseconds not milli)
+    "CU__UUID_VERSION": 'v3',
 
     # ------------------------------------------------------------------------------------------------------------------
     # -------------------------------------------------------------------------------------- Crypt Util (AUTH Subsystem)
@@ -67,7 +70,7 @@ _KNOBS = {
     "CU_AUTH_KDF__SALT": b'b261ef47_l6sk_auth_1ea8f2ac',
 
     # kdf method. one of "scrypt_then_pbkdf2_hmac", "pbkdf2_hmac", "scrypt"
-    # scrypt_then_pbkdf2_hmac (with 16 MB mem) and 40k rounds of pbkdf2 takes about 80 milliseconds, on 4GHz zen+
+    # scrypt_then_pbkdf2_hmac (with 16 MB mem) and 40k rounds of pbkdf2 takes about 64 milliseconds, on 4GHz zen+
     "CU_AUTH_KDF__METHOD": 'scrypt_then_pbkdf2_hmac',
 
     # scrypt params, generally must be powers of two.

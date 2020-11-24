@@ -149,7 +149,8 @@ disable=print-statement,
         too-many-arguments,
         raise-missing-from,
         unnecessary-lambda,
-        no-member
+        no-member,
+        too-few-public-methods
 
 
 [REPORTS]
