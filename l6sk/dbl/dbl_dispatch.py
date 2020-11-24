@@ -14,7 +14,7 @@ import enum
 
 from l6sk import knobman as km
 from l6sk.dbl.dbl_api import DBL_API
-from l6sk.dbl.dbl_util import dbl_uuid
+from l6sk import crypt_util
 
 # careful w/ log or print() calls from this module. It has a dedicated thread and inf loop.
 # a misplaced print() will turn this into a text generator program.
@@ -68,7 +68,7 @@ class DBL_REQ:
     fail_cause: typing.Any = None
 
     # each request gets a random uuid.
-    # uuid: str = field(default_factory=dbl_uuid)
+    # uuid: str = field(default_factory=lambda: crypt_util.get_uuid_generator().get_l6sk_uuid_b64())
 
     def __str__(self):
         # tmp_str = f"DBL_REQ(op={self.op}, priority={self.priority}, uuid={self.uuid}, data={self.data}, "
@@ -183,7 +183,7 @@ class DBL_REQUEST_DISPATCH:
     # ==================================================================================================================
     def put_req(self, req: DBL_REQ):
 
-        log.info(f"put_req called. DBL_REQ: {req}")
+        # log.info(f"put_req called. DBL_REQ: {req}")
 
         # default to normal priority. but it should be set properly already.
         dest_q = self._q_norm
