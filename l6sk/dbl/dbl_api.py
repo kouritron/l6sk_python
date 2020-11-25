@@ -55,19 +55,30 @@ class DBL_API(enum.Enum):
 # ======================================================================================================================
 @dataclass(frozen=True)
 class DBL_FAIL_CAUSE:
+    """ Fields:
 
-    # If the arisen situation corresponds to an http error, DAO can set it here. This will be None,
-    # If DAO doesnt know or care.
+    ---
+    ### http_err_code:
+    If the arisen situation corresponds to an http error, DAO will set it here.
+    If DAO doesnt know or doesnt care, This will be None.
+
+    ---
+    ### user_msg:
+    A short english msg that could be sent back to the user who made the HTTP request if necessary. Again DAO will
+    only produce such a message if it can. otherwise None. The message must be such that its OK to show up
+    on the client side or client logs, .... It should not reveal internal data. Its upto the web to use it or not.
+
+    ---
+    ### dbg_info_string:
+    More detailed failure information. This should not be sent out to any clients.
+    It is strongly advised to not save an exception here. Saving "str(ex)" is ok, because its just a string.
+    but storing the actual exception object has lots of implications. It has a ton of pointers to an entire
+    call stack none of which can be garbage collected as long as this pointer lives.
+    """
+
     http_err_code = None
-
-    # A short english msg that could be sent back to the user who made the HTTP request. Ok to show up in client logs.
-    # Should not reveal internal data. The web layer might build an error page around this msg.
     user_msg: str = None
-
-    # more detailed failure information. I strongly urge ppl to avoid saving the exception here. preferably "str(ex)"
-    # storing the actual exception object has lots of implications. It has a ton of pointers to an entire
-    # call stack none of which can be garbage collected as long as this pointer lives.
-    dbg_data: typing.Any = None
+    dbg_info_string: str = None
 
 
 # ======================================================================================================================

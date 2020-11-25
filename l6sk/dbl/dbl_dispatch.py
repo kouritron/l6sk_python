@@ -282,10 +282,10 @@ class DBL_REQUEST_DISPATCH:
 # **************************************** Process a single DBL request.
 def process_dbl_req(dao, next_req: DBL_REQ):
 
-    # careful not to crash this thread. we need this inf loop to keep serving requests, even if one request fails
-    # miserably or 100 in a row (db was out 2 minute)
+    # careful not to crash this thread. we need this thread in inf loop to keep serving requests,
+    # even if 1 or 100 request fail miserably. ie db was out 5 minutes
     try:
-        dao.prcoess_req(next_req)
+        dao.serve_req(next_req)
     except:
         pass
 

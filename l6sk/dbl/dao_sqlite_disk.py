@@ -12,7 +12,7 @@ import threading
 from l6sk.dbl.dbl_dispatch import DBL_REQ
 from l6sk.dbl.dbl_api import DBL_API
 
-from l6sk.dbl.dbl_util import derive_login_key_from_user_pass
+from l6sk.crypt_util import get_auth_kdf
 
 from l6sk import knobman as km
 from l6sk import log_util as log
@@ -21,6 +21,8 @@ from l6sk import log_util as log
 class DAO_SQLITE:
     """ Sqlite implementation of the l6sk DAO interface. """
 
+    # This class should take its knobs as constructor args for consistency and ease of testing.
+    # if knobman is used it should be in some sort of module level lazy init function. Not inside this class.
     def __init__(self, db_filename: str):
         super().__init__()
 
@@ -195,7 +197,7 @@ class DAO_SQLITE:
         if len(rows) >= 1:
             # user was valid. rows[0] is a tuple
             # print( rows[0])
-            if derive_login_key_from_user_pass(password) == rows[0][5]:
+            if get_auth_kdf().get_pw_shadow_b64(password) == rows[0][5]:
                 user_result['op_failed'] = False
                 server_result['uid'] = rows[0][0]
                 server_result['u_name'] = rows[0][1]

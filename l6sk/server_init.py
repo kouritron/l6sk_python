@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 """
 Init system for l6sk. This module configures and manages the lifecycle for various subsystem to start an instance
 of l6sk.
@@ -21,14 +20,13 @@ import tornado.options as topts
 # topts.parse_config_file   >>> to parse a "server.conf" file
 # topts.options             >>> Get the options from here
 
-
 import l6sk.knobman as km
 import l6sk.log_util as log
 
-from l6sk.dbl.dao_sqlite import DAO_SQLITE
+from l6sk.dbl.dao_sqlite_mem import MemSqliteDAO
 from l6sk.dbl.dbl_dispatch import DBL_REQUEST_DISPATCH, dbl_service_thread_entry
 from l6sk.l6sk_contract import L6SK_ROUTES
-
+from l6sk import crypt_util
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -42,18 +40,24 @@ topts.define("debug", default=False, help="run in debug mode")
 # ======================================================================================================================
 def webapp_init():
 
-    # start by reading in the knobs.
-    print(f"Starting l6sk web server ... pid: {os.getpid()}\n")
+    print(f"Starting l6sk web server ... pid: {os.getpid()}")
 
+    # ******************** init knobman and start using log
     km.init_knob_man()
     log.info("knobman initialized.")
-    log.dbg(f"Current knobs: {km.get_dbg_snapshot_as_json_string()}")
+    log.dbg(f"knobman debug dump: {km.get_dbg_dump()}")
 
-    # ******************** CHOOSE DAO
+    # ******************** trigger lazy initializers (optional)
+    crypt_util.init_crypt_util()
+
+    # ******************** Choose DAO
     log.info("Starting DB Layer using the sqlite3 DAO")
 
-    dao_kwargs = {"db_filename": km.get_knob("DBL_SQLITE_DB_FILENAME")}
-    dao_maker_callable = lambda: DAO_SQLITE(**dao_kwargs)
+    # TODO: decide if DBL can just retrieve a default DAO.
+    # I think since we may have multiple DAO implementations, it makes sense to not have a default.
+    # although we could do it, and then choose the default by setting something in knobman.
+    # dao_kwargs = {"db_filename": km.get_knob("DBL_SQLITE_DB_FILENAME")}
+    dao_maker_callable = lambda: MemSqliteDAO()
 
     # ******************** request dispatch
     dispatch = DBL_REQUEST_DISPATCH()
@@ -67,7 +71,6 @@ def webapp_init():
     # which simply means if main thread is gone, no dbl is needed anymore. sounds right.
     t.setDaemon(True)
     t.start()
-
 
     # ******************** Tornado web server
     topts.parse_command_line()

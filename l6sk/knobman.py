@@ -1,21 +1,28 @@
-# knobs manager.
-# put all the config options here.
-# we r doing it as python file, as opposed to JSON, YAML, .env file, .....
-# This has the advantage that you can generate some options programmatically if need be. For example by
-# querying EC2 metadata endpoint and finding out which AZ you are in. Or generate random numbers, or find a path ...
-# We could also section this file if we have dev/qa/prod params, ...
+""" knobman: knobs manager. A central location for all configurable knobs.
+
+We r doing it as a python file, as opposed to JSON, YAML, .conf, .env file, .....
+so that its possible to generate some options programmatically if need be. For example by learning a path at runtime
+or querying EC2 metadata endpoint.
+
+*** A common pattern in this project is to group together a piece of logic in a class. Have the class take all its
+args at init time so its standalone and testable and does not change its behavior based on whats inside knobman.
+And finally typically there is a default instance of, possibly lazily initialized, at the module level. The lazy
+init function would extract the knobs and init an instance.
+
+*** Tornado Cli options parsing is separate story. Knobman doesnt deal with that. Also some module's are
+self-contained components and they have their own sensible constants (constants != configurable knobs).
+Other than these, everything that can be turned into a named, centralized knobs should be managed by knobman ideally.
+
+*** Strong prefernce for keeping knobman as a one-way street. Ideally it should only have getters and no setter.
+which is why the setter functions are hopefully going to remain commented out.
+
+"""
 
 import os
-import sys
 import time
 import json
 
 from pathlib import Path
-
-from dataclasses import dataclass
-import shutil
-import typing
-import enum
 
 # Dont import project level modules here. Idea is for knobman to control other files, not the other way around.
 
@@ -25,7 +32,7 @@ import enum
 # ======================================================================================================================
 # ================================================================================================================ Knobs
 
-_KNOBS = {
+_knobs = {
 
     # ------------------------------------------------------------------------------------------------------------------
     # -------------------------------------------------------------------------------------------------- General options
@@ -152,7 +159,7 @@ _KNOBS = {
 # })
 
 # ******************** MEMORY sqlite DAO
-# _KNOBS.update({
+# _knobs.update({
 #     # TODO fill in.
 #     "SQLITE_MEM_DAO__XXXX": "YYYYYYYYY",
 # })
@@ -162,17 +169,17 @@ _KNOBS = {
 # ======================================================================================================================
 # ======================================================================================================================
 # ================================================================================ Knobman API + the necessary lazy init
-_KNOBMAN_INITIALIZED = False
+_knobman_initialized = False
 
 
 def init_knob_man():
 
-    print(f"knob man init called. Time now: {time.time():,.4f}")
+    print(f"init knobman called. Time: {time.time():,.2f}")
     # if there is something than needs compute at init time, but not import time, do it here.
 
     # ******************** Sqlite disk DAO, if exists.
     # deal w/ sqlite db directory and clean start flags.
-    sqlite_fs_dao_db_file = _KNOBS.get('SQLITE_FS_DAO__DB_FILENAME')
+    sqlite_fs_dao_db_file = _knobs.get('SQLITE_FS_DAO__DB_FILENAME')
 
     if sqlite_fs_dao_db_file:
         db_file_parent_dir = str((Path(sqlite_fs_dao_db_file) / '..').resolve())
@@ -181,7 +188,7 @@ def init_knob_man():
         Path(db_file_parent_dir).mkdir(parents=True, exist_ok=True)
 
         # drop db file, if it exists.
-        if _KNOBS["SQLITE_FS_DAO__START_CLEAN"]:
+        if _knobs["SQLITE_FS_DAO__START_CLEAN"]:
             if (":memory:" != sqlite_fs_dao_db_file) and os.path.exists(sqlite_fs_dao_db_file):
                 try:
                     os.remove(sqlite_fs_dao_db_file)
@@ -191,9 +198,9 @@ def init_knob_man():
     # ******************** Next
 
     # ******************** dont come bacck here again.
-    print(f"knob man init complete. Time now: {time.time():,.4f}")
-    global _KNOBMAN_INITIALIZED
-    _KNOBMAN_INITIALIZED = True
+    print(f"init knobman complete. Time: {time.time():,.2f}")
+    global _knobman_initialized
+    _knobman_initialized = True
 
 
 def get_knob(kkey: str):
@@ -202,42 +209,44 @@ def get_knob(kkey: str):
     The knob key is always string. The value may be any object.
     None, if key is not found. """
 
-    if not _KNOBMAN_INITIALIZED:
+    if not _knobman_initialized:
         init_knob_man()
 
     kkey = kkey.upper()
 
     # TODO correct behavior is None if not found. lots of ugly try excepts otherwise.
     # but if you want to be alerted during dev if some typo shows up or what not. soln is print warning.
-    return _KNOBS.get(kkey)
+    return _knobs.get(kkey)
 
+# ======================================================================================================================
+# ======================================================================================================================
+# ============================================================================================================== dbg/dev
+# ideally knobman is a one way street. you can get knobs from it, but not set things on it.
+# if there is a really good reason
+# def set_knob(kkey: str, kval):
 
-# this is useful at least in testing.
-def set_knob(kkey: str, kval):
+#     if not _knobman_initialized:
+#         init_knob_man()
 
-    if not _KNOBMAN_INITIALIZED:
-        init_knob_man()
+#     _knobs[kkey] = kval
 
-    _KNOBS[kkey] = kval
-
-
-# This shouldnt exist really even for testing. Components need to be testable on their own.
 # def update_knobs(new_knobs: dict):
 #     """ Given a knobs dict (or partial knobs dict), update current knobs. Conflict to be
 #     resolved in favor of the incoming dict. """
 
-#     if not _KNOBMAN_INITIALIZED:
+#     if not _knobman_initialized:
 #         init_knob_man()
 
-#     _KNOBS.update(new_knobs)
+#     _knobs.update(new_knobs)
 
 
-# this for dbg info.
-def get_dbg_snapshot_as_json_string() -> str:
-    """ Try to turn current KNOBS into a JSON string and return this string. Not a reliable
-    serializer/deserializer. Might lose info during this process. """
+def get_dbg_dump() -> str:
+    """ Return a JSON string representing the current knobs.
+    Just for debugging and this should not be treated as some sort of serializer/deserializer. Might lose
+    info during this process when everything gets cast to string. """
 
-    # with default lambda trick, i dont think exception can occur actually anymore.
-    result = json.dumps(_KNOBS, sort_keys=True, indent=4, default=lambda x: str(x))
+    # Exception is possible here if things can not get serialized properly.
+    # default lambda sort of prevents that by turning everything into a str.
+    result = json.dumps(_knobs, sort_keys=True, indent=4, default=lambda x: str(x))
 
     return result
