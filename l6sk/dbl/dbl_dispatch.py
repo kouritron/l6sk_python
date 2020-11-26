@@ -307,18 +307,26 @@ def dbl_service_thread_entry(dao_maker_callable, req_dispatch: DBL_REQUEST_DISPA
     For a file maybe you can. In any case its the DAO's responsibility. It could use a connection pool or some other
     mechanism. """
 
-    sleep_timeout = km.get_knob("DBL_WORKER_THREAD_SLEEP_WAIT_TIMEOUT")
-    idle_counter_threshold = km.get_knob("DBL_DISPATCH_IDLE_COUNTER_THRESHOLD")
+    sleep_timeout = float(km.get_knob("DBL__IDLE_QUEUE_SLEEP_TIMEOUT"))
+    idle_counter_threshold = int(km.get_knob("DBL__IDLE_QUEUE_THRESHOLD"))
     idle_counter = 0
 
     # assert idle_counter_threshold is positive int, otherwise refuse to init while still early.
-    if (not isinstance(idle_counter_threshold, int)) or (idle_counter_threshold < 1):
-        print("Init Error. Invalid DBL_DISPATCH_IDLE_COUNTER_THRESHOLD knob. Going to exiting now ...", flush=True)
+    if (idle_counter_threshold < 1) or (idle_counter_threshold > 500000):
+        print("Init Error. Invalid DBL__IDLE_QUEUE_THRESHOLD knob. Going to exiting now ...", flush=True)
         sys.stdout.flush()
         sys.stderr.flush()
-        os._exit()  # pylint: disable=protected-access
+        os._exit(2)  # pylint: disable=protected-access
+
+    if sleep_timeout <= 0:
+        print("Init Error. Invalid DBL__IDLE_QUEUE_SLEEP_TIMEOUT knob. Going to exiting now ...", flush=True)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(2)  # pylint: disable=protected-access
 
     dao = dao_maker_callable()
+
+    log.info("DBL dispacth entering service loop ...")
 
     # DBL thread never leaves this loop, careful exceptions must not break this loop, otherwise DBL is gone,
     # and the only planned/sensible recourse is to restart the web server process.

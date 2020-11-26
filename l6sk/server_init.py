@@ -30,13 +30,6 @@ from l6sk import crypt_util
 
 # ======================================================================================================================
 # ======================================================================================================================
-# ====================================================================================================== Tornado options
-topts.define("port", default=1655, help="l6sk server port", type=int)
-topts.define("debug", default=False, help="run in debug mode")
-
-
-# ======================================================================================================================
-# ======================================================================================================================
 # ======================================================================================================================
 def webapp_init():
 
@@ -57,6 +50,7 @@ def webapp_init():
     # I think since we may have multiple DAO implementations, it makes sense to not have a default.
     # although we could do it, and then choose the default by setting something in knobman.
     # dao_kwargs = {"db_filename": km.get_knob("DBL_SQLITE_DB_FILENAME")}
+    # dao_maker_callable = lambda: MemSqliteDAO(**dao_kwargs)
     dao_maker_callable = lambda: MemSqliteDAO()
 
     # ******************** request dispatch
@@ -64,23 +58,25 @@ def webapp_init():
 
     # Create DBL worker thread. This is the "DBL service". And give it pointers to the dispatch queues.
     t = threading.Thread(target=dbl_service_thread_entry,
-                         name=km.get_knob("DBL_WORKER_THREAD_NAME"),
+                         name="dbl_worker_thread",
                          args=(dao_maker_callable, dispatch))
 
     # NOTE This might be a bit unsettled. Currently I am daemonizing the DBL worker thread
     # which simply means if main thread is gone, no dbl is needed anymore. sounds right.
+    # NOTE: What does this do to DAO's stdout and stderr ?? answer seems to be nothing special.
+    # stdout and stderr are there and work as normal. however if only daemonic threads are left the process
+    # will abruptly terminate and the last few print() calls may not get a chance to flush().
     t.setDaemon(True)
     t.start()
 
     # ******************** Tornado web server
+    # Tornado ppl normally put these on top of the file, but since we have knobman and it solves many problems ...
+    topts.define("port", default=km.get_knob('TORNADO__SERVER_PORT'), help="l6sk server port", type=int)
+    topts.define("debug", default=km.get_knob('TORNADO__DEBUG_MODE'), help="run in debug mode")
+
     topts.parse_command_line()
 
-    # TODO move some of these over to knobman
-    repo_root = (Path(__file__) / '..' / '..').resolve()
-    static_path = str(repo_root / 'l6sk_webui' / 'static')
-    template_path = str(repo_root / 'l6sk_webui' / 'templates')
     server_port = topts.options.port
-    server_dbg_mode = topts.options.debug
 
     # --------- settings:
     tor_app_settings = {
@@ -88,12 +84,12 @@ def webapp_init():
         # This will serve static files from the given filesystem path for the URLs:
         # "/static/*", "/favicon.ico", "/robots.txt"
         # if you want to change these loot at: "static_url_prefix" setting
-        'static_path': static_path,
-        'template_path': template_path,
+        'static_path': km.get_knob('PATHNAME__STATIC_DIR'),
+        'template_path': km.get_knob('PATHNAME__TEMPLATES_DIR'),
         'xsrf_cookies': True,
 
         # debug=True implies autoreload=True
-        'debug': server_dbg_mode
+        'debug': topts.options.debug
     }
 
     log.info(f"Starting log socket server on: {server_port}")

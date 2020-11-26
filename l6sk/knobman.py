@@ -38,16 +38,23 @@ _knobs = {
     # -------------------------------------------------------------------------------------------------- General options
     # One of the benefits of .py knobs file vs JSON/YAML, is to figure out things at runtime.
     # knobman prefers strings, not other objects like Path. In general, strings are always preferred in knobman.
-    "STATIC_DIR_PATHNAME": str((Path(__file__) / '..' / '..' / 'l6sk_webui' / 'static').resolve()),
-    "TEMPLATES_DIR_PATHNAME": str((Path(__file__) / '..' / '..' / 'l6sk_webui' / 'templates').resolve()),
+    "PATHNAME__REPO_ROOT": str((Path(__file__) / '..' / '..').resolve()),
+    "PATHNAME__STATIC_DIR": str((Path(__file__) / '..' / '..' / 'l6sk_webui' / 'static').resolve()),
+    "PATHNAME__TEMPLATES_DIR": str((Path(__file__) / '..' / '..' / 'l6sk_webui' / 'templates').resolve()),
 
     # ------------------------------------------------------------------------------------------------------------------
     # ---------------------------------------------------------------------------------------------- Tornado app options
-    # 'PORT': 6060,
+
+    # these can be overridden by cli options, but if not then this is the default.
+    'TORNADO__SERVER_PORT': 1655,
+    # 'TORNADO__DEBUG_MODE': False,
+    'TORNADO__DEBUG_MODE': True,
+
     # Port and debug mode is handled by tornado cli option parsing. TODO find out what the listen host is
     # 'LISTEN_HOST': '127.0.0.1',
-
     # 'WSGI_SERVER': 'cheroot',
+
+
 
     # ------------------------------------------------------------------------------------------------------------------
     # --------------------------------------------------------------------------------------------------------- l6sk API
@@ -95,22 +102,20 @@ _knobs = {
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------- Misc
-    # thread name is useful for debugging.
-    "DBL_WORKER_THREAD_NAME": "dbl_worker_thread",
 
     # sleep wait timeout for the DBL worker thread, in seconds i.e. 0.01 equals 10 milli seconds.
     # The idea is that DBL worker will sleep this much, if it hasnt seen a request in a while, instead of
     # of busy waiting/angrily checking the queue for the next req constantly.
     # This is not related to API handlers waiting for DBL results. That problem has better solutions than sleep wait.
-    "DBL_WORKER_THREAD_SLEEP_WAIT_TIMEOUT": 0.01,
+    "DBL__IDLE_QUEUE_SLEEP_TIMEOUT": 0.01,
 
     # dbl dipatcher will not sleep between requests, unless this many attempts face empty queues. In that case
     # it will start sleep waiting for the next request until there is a new request which will reset counter to 0.
-    "DBL_DISPATCH_IDLE_COUNTER_THRESHOLD": 10,
+    "DBL__IDLE_QUEUE_THRESHOLD": 10,
 
     # ------------------------------------------------------------------------------------------------------------------
     # --------------------------------------------------------------------------------------------------- Service Limits
-    # various subsystems may read these limits and refuse service beyond them.
+    # various subsystems may read these limits and refuse service beyond these.
     # for example the limits on user name length could be used by the web layer to reject names that are too long
     # or too short. These can also be used by the DB Layer in case the DB wants to assert such things also.
     # (possibly assert name len twice, in web layer, and db layer)
@@ -217,6 +222,7 @@ def get_knob(kkey: str):
     # TODO correct behavior is None if not found. lots of ugly try excepts otherwise.
     # but if you want to be alerted during dev if some typo shows up or what not. soln is print warning.
     return _knobs.get(kkey)
+
 
 # ======================================================================================================================
 # ======================================================================================================================
